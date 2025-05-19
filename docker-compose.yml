@@ -1,4 +1,22 @@
+version: '3.8'
+
 services:
+  db:
+    image: postgres:latest
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+
   web:
     build: .
     ports:
@@ -10,16 +28,11 @@ services:
       - static:/app/static
       - media:/app/media
     depends_on:
-      - db
-
-  db:
-    image: postgres:13
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data/
+      db:
+        condition: service_healthy
+    command: sh -c "python manage.py migrate && gunicorn projectname.wsgi:application --bind 0.0.0.0:8000"
+    networks:
+      - app-network
 
   nginx:
     image: nginx:latest
@@ -33,8 +46,14 @@ services:
       - media:/app/media
     depends_on:
       - web
+    networks:
+      - app-network
 
 volumes:
   postgres_data:
   static:
-  media:            
+  media:
+
+networks:
+  app-network:
+    driver: bridge
